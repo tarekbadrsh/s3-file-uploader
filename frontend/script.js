@@ -1,13 +1,97 @@
 // Configuration - Update these values
 const API_URL = 'http://localhost:3000';
 const JWT_TOKEN = 'YOUR_JWT_TOKEN'; // Should be obtained from an authentication service
+const PROJECT_ID = 'DEFAULT_PROJECT_ID'; // Update this with your project ID or get it dynamically
+const HEALTH_CHECK_INTERVAL = 60 * 1000; // 1 minute in milliseconds
+
+/**
+ * Update the API health status indicator
+ * @param {boolean} isHealthy - Whether the API is healthy
+ */
+function updateHealthIndicator(isHealthy) {
+    const indicator = document.getElementById('apiHealthIndicator');
+    const statusText = document.getElementById('apiHealthText');
+
+    if (!indicator) return;
+
+    // Update class and tooltip
+    if (isHealthy) {
+        indicator.classList.remove('unhealthy');
+        indicator.classList.add('healthy');
+        indicator.setAttribute('title', 'API is online');
+        if (statusText) {
+            statusText.textContent = 'Online';
+            statusText.style.color = '#2ecc71';
+        }
+    } else {
+        indicator.classList.remove('healthy');
+        indicator.classList.add('unhealthy');
+        indicator.setAttribute('title', 'API is offline');
+        if (statusText) {
+            statusText.textContent = 'Offline';
+            statusText.style.color = '#e74c3c';
+        }
+    }
+}
+
+/**
+ * Start monitoring API health
+ */
+function startHealthMonitoring() {
+    // Check immediately on startup
+    checkApiHealth().then(isHealthy => {
+        console.log('Initial API health status:', isHealthy ? 'online' : 'offline');
+        updateHealthIndicator(isHealthy);
+    });
+
+    // Set up interval for regular checks - every 10 minutes
+    console.log('Setting up health check interval every', HEALTH_CHECK_INTERVAL / 60000, 'minutes');
+
+    // Use a named interval so we can debug it if needed
+    const healthInterval = setInterval(async () => {
+        console.log('Running scheduled health check...');
+        const isHealthy = await checkApiHealth();
+        console.log('API health status:', isHealthy ? 'online' : 'offline');
+        updateHealthIndicator(isHealthy);
+    }, HEALTH_CHECK_INTERVAL);
+
+    // Store the interval ID on window for debugging
+    window.healthCheckInterval = healthInterval;
+}
+
+/**
+ * Check if the API is still live
+ * @returns {Promise<boolean>} - True if API is live, false otherwise
+ */
+async function checkApiHealth() {
+    try {
+        const response = await fetch(`${API_URL}/health`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${JWT_TOKEN}`
+            }
+        });
+
+        if (response.ok) {
+            console.log('API is healthy');
+            return true;
+        } else {
+            console.error('API health check failed with status:', response.status);
+            return false;
+        }
+    } catch (error) {
+        console.error('API health check error:', error);
+        return false;
+    }
+}
 
 /**
  * Upload a file to the server with progress tracking
  * @param {File} file - The file to upload
+ * @param {string} projectId - The project ID
  * @returns {Promise<Object>} - Response from the server
  */
-async function uploadFile(file) {
+async function uploadFile(file, projectId) {
     // Validate file
     if (!file) {
         throw new Error('No file selected');
@@ -21,10 +105,6 @@ async function uploadFile(file) {
 
     // Log file information for debugging
     console.log('Uploading file:', file.name, file.type, file.size);
-
-    // Create form data
-    const formData = new FormData();
-    formData.append('file', file);
 
     // Create and show progress elements
     const progressContainer = document.getElementById('progressContainer');
@@ -53,6 +133,26 @@ async function uploadFile(file) {
     }
 
     try {
+        // Read the file as base64
+        const fileBase64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                // Get base64 string without the data URL prefix
+                const base64String = reader.result.split(',')[1];
+                resolve(base64String);
+            };
+            reader.onerror = () => reject(new Error('Failed to read file'));
+            reader.readAsDataURL(file);
+        });
+
+        // Prepare the request payload according to the new backend format
+        const payload = {
+            file: fileBase64,
+            fileName: file.name,
+            fileType: file.type,
+            projectId: projectId
+        };
+
         // Create XMLHttpRequest for progress tracking
         const xhr = new XMLHttpRequest();
 
@@ -96,7 +196,8 @@ async function uploadFile(file) {
         // Open and send the request
         xhr.open('POST', `${API_URL}/upload`, true);
         xhr.setRequestHeader('Authorization', `Bearer ${JWT_TOKEN}`);
-        xhr.send(formData);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.send(JSON.stringify(payload));
 
         // Wait for the upload to complete
         const data = await uploadPromise;
@@ -130,6 +231,8 @@ async function uploadFile(file) {
                 <h3>Upload Successful!</h3>
                 <p>File: ${data.originalName}</p>
                 <p>Type: ${data.fileType}</p>
+                <p>Project ID: ${data.projectId}</p>
+                <p>Uploaded at: ${new Date(data.uploadedAt).toLocaleString()}</p>
                 <p>CDN URL: <a href="${data.url}" target="_blank">${data.url}</a></p>
                 <div class="uploaded-media-container">
                     ${mediaPreview}
@@ -176,6 +279,7 @@ function initializeUpload() {
     const fileInput = document.getElementById('fileInput');
     const uploadButton = document.getElementById('uploadButton');
     const fileInputLabel = document.getElementById('fileInputLabel');
+    const projectIdInput = document.getElementById('projectIdInput') || { value: PROJECT_ID }; // Use input or default
 
     // Update file input label when a file is selected
     fileInput.addEventListener('change', () => {
@@ -197,11 +301,18 @@ function initializeUpload() {
             return;
         }
 
+        // Get projectId from input or use default
+        const projectId = projectIdInput.value.trim() || PROJECT_ID;
+        if (!projectId) {
+            alert('Please enter a Project ID');
+            return;
+        }
+
         // Disable button during upload
         uploadButton.disabled = true;
 
         try {
-            await uploadFile(file);
+            await uploadFile(file, projectId);
             // Clear file input after successful upload
             fileInput.value = '';
             fileInputLabel.textContent = 'Choose a file';
@@ -258,4 +369,10 @@ function initializeUpload() {
 }
 
 // Initialize when the DOM is loaded
-document.addEventListener('DOMContentLoaded', initializeUpload);
+document.addEventListener('DOMContentLoaded', () => {
+    // Initialize upload functionality
+    initializeUpload();
+
+    // Start API health monitoring
+    startHealthMonitoring();
+});

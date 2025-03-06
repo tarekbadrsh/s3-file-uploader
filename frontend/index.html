@@ -45,6 +45,7 @@
         header {
             text-align: center;
             margin-bottom: 30px;
+            position: relative;
         }
 
         h1 {
@@ -55,6 +56,71 @@
         .subheading {
             color: #777;
             font-size: 1.1rem;
+        }
+
+        /* API Health Indicator */
+        .api-status {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 5px 10px;
+            border-radius: 20px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .api-health-indicator {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            display: inline-block;
+            border: 1px solid #ccc;
+            transition: background-color 0.3s ease;
+            position: relative;
+        }
+
+        .api-health-indicator.healthy {
+            background-color: #2ecc71;
+            /* Green */
+            animation: pulse-green 2s infinite;
+        }
+
+        .api-health-indicator.unhealthy {
+            background-color: #e74c3c;
+            /* Red */
+            animation: pulse-red 2s infinite;
+        }
+
+        @keyframes pulse-green {
+            0% {
+                box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.7);
+            }
+
+            70% {
+                box-shadow: 0 0 0 5px rgba(46, 204, 113, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(46, 204, 113, 0);
+            }
+        }
+
+        @keyframes pulse-red {
+            0% {
+                box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7);
+            }
+
+            70% {
+                box-shadow: 0 0 0 5px rgba(231, 76, 60, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(231, 76, 60, 0);
+            }
         }
 
         .upload-container {
@@ -352,6 +418,11 @@
         <header>
             <h1>S3 File Uploader</h1>
             <p class="subheading">Securely upload your files to Amazon S3</p>
+            <div class="api-status">
+                <span>API Status:</span>
+                <span id="apiHealthIndicator" class="api-health-indicator" title="Checking API status..."></span>
+                <span id="apiHealthText">Checking...</span>
+            </div>
         </header>
 
         <div class="upload-container">
